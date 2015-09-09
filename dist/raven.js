@@ -1,4 +1,4 @@
-/*! Raven.js 1.1.22 (6278810) | github.com/getsentry/raven-js */
+/*! Raven.js 1.1.22 (0910beb) | github.com/getsentry/raven-js */
 
 /*
  * Includes TraceKit
@@ -29,7 +29,6 @@ var TraceKit = {
 var _slice = [].slice;
 var UNKNOWN_FUNCTION = '?';
 
-
 /**
  * TraceKit.wrap: Wrap any function in a TraceKit reporter
  * Example: func = TraceKit.wrap(func);
@@ -47,6 +46,13 @@ TraceKit.wrap = function traceKitWrapper(func) {
         }
     }
     return wrapped;
+};
+
+function getLocationHref() {
+    if (typeof document === 'undefined')
+        return '';
+
+    return document.location.href;
 };
 
 /**
@@ -182,7 +188,7 @@ TraceKit.report = (function reportModuleWrapper() {
             location.context = TraceKit.computeStackTrace.gatherContext(location.url, location.line);
             stack = {
                 'message': message,
-                'url': document.location.href,
+                'url': getLocationHref(),
                 'stack': [location]
             };
             notifyHandlers(stack, true);
@@ -526,6 +532,9 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * the url, line, and column number of the defined function.
      */
     function findSourceByFunctionBody(func) {
+        if (typeof document === 'undefined')
+            return;
+
         var urls = [window.location.href],
             scripts = document.getElementsByTagName('script'),
             body,
@@ -694,7 +703,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
         return {
             'name': ex.name,
             'message': ex.message,
-            'url': document.location.href,
+            'url': getLocationHref(),
             'stack': stack
         };
     }
@@ -751,7 +760,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
         return {
             'name': ex.name,
             'message': ex.message,
-            'url': document.location.href,
+            'url': getLocationHref(),
             'stack': stack
         };
     }
@@ -861,7 +870,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
         return {
             'name': ex.name,
             'message': lines[0],
-            'url': document.location.href,
+            'url': getLocationHref(),
             'stack': stack
         };
     }
@@ -998,7 +1007,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
         var result = {
             'name': ex.name,
             'message': ex.message,
-            'url': document.location.href,
+            'url': getLocationHref(),
             'stack': stack
         };
         augmentStackTraceWithInitialElement(result, ex.sourceURL || ex.fileName, ex.line || ex.lineNumber, ex.message || ex.description);
@@ -1064,7 +1073,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
         return {
             'name': ex.name,
             'message': ex.message,
-            'url': document.location.href,
+            'url': getLocationHref()
         };
     }
 
@@ -1083,6 +1092,8 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
 // since JSON is required to encode the payload
 var _Raven = window.Raven,
     hasJSON = !!(typeof JSON === 'object' && JSON.stringify),
+    // Raven can run in contexts where there's no document (react-native)
+    hasDocument = typeof document !== 'undefined',
     lastCapturedException,
     lastEventId,
     globalServer,
@@ -1285,6 +1296,9 @@ var Raven = {
             }
         }
 
+        // copy prototype of the old function
+        wrapped.prototype = func.prototype;
+
         // Signal that this function has been wrapped already
         // for both debugging and to prevent it to being wrapped twice
         wrapped.__raven__ = true;
@@ -1435,6 +1449,21 @@ var Raven = {
         return Raven;
     },
 
+    /**
+     * Override the default HTTP transport mechanism that transmits data
+     * to the Sentry server.
+     *
+     * @param {function} transport Function invoked instead of the default
+     *                             `makeRequest` handler.
+     *
+     * @return {Raven}
+     */
+    setTransport: function(transport) {
+        globalOptions.transport = transport;
+
+        return Raven;
+    },
+
     /*
      * Get the latest raw exception that was captured by Raven.
      *
@@ -1467,6 +1496,9 @@ Raven.setUser = Raven.setUserContext; // To be deprecated
 
 function triggerEvent(eventType, options) {
     var event, key;
+
+    if (!hasDocument)
+        return;
 
     options = options || {};
 
@@ -1743,7 +1775,7 @@ function now() {
 }
 
 function getHttpData() {
-    if (!document.location || !document.location.href) {
+    if (!hasDocument || !document.location || !document.location.href) {
         return;
     }
 
